@@ -1,0 +1,28 @@
+# Local run that mirrors AWS: MySQL 8 + the app. Use scripts/setup.ps1 (Windows) or scripts/setup.sh (Mac/Linux)
+# to create .env with generated passwords, then the app is at http://localhost:8000
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: lms
+      MYSQL_USER: lms
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Run scripts/setup first to create .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run scripts/setup first to create .env}
+    command: ["--character-set-server=utf8mb4", "--default-time-zone=+05:30"]
+    # Reachable from this computer only
+    ports: ["127.0.0.1:3306:3306"]
+    volumes: [dbdata:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 20
+  app:
+    build: .
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      DATABASE_URL: mysql+pymysql://lms:${MYSQL_PASSWORD}@db:3306/lms
+    ports: ["8000:8000"]
+volumes:
+  dbdata:

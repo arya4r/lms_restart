@@ -3,8 +3,10 @@
 These need the database that holds the reference loans, so they are skipped unless
 REFERENCE_DATABASE_URL is set. The database and its credentials stay outside git.
 
+The loan is in the AWS RDS database GFL_DWH. Through the SSH tunnel that is 127.0.0.1:3307.
+
 Run:
-    REFERENCE_DATABASE_URL=mysql+pymysql://user:pw@host:3306/lms \
+    REFERENCE_DATABASE_URL=mysql+pymysql://user:pw@127.0.0.1:3307/GFL_DWH \
     REFERENCE_ADMIN_PASSWORD=... \
     python -m pytest tests/reference -v
 
@@ -61,8 +63,8 @@ def test_fcl_total_on_8_nov_2026(client, loan_id):
     q = client.get(f"/api/loans/{loan_id}/foreclosure", params={"as_of": "2026-11-08"}).json()
     assert _money(q["fcl_amount"]) == D("69131")
     assert _money(q["total"]) == D("73331")
-    # the charges figure is the part of the total that is not the FCL amount
-    assert _money(q["total"]) - _money(q["fcl_amount"]) == D("4200")
+    # charges line: unpaid late charges (Rs 600 x 7 instalments, 22 to 28) plus any bounce charge
+    assert _money(q["bounce_charges"]) == D("4200")
 
 
 def test_dpd_on_8_nov_2026(client, loan_id):

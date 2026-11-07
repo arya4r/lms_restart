@@ -103,13 +103,13 @@ GitHub Actions runs the same backend tests, the frontend build and a Docker buil
 ### Reference checks (real loans)
 
 `backend/tests/reference/` checks figures that were signed off against the migrated database, for example
-loan GFLE2W100009242 (FCL 69,131, charges 4,200, total 73,331 and DPD 65 as of 8 Nov 2026; DPD 26 as of 30 Apr 2026).
+loan GFLE2W100009242 (FCL 69,131, charges 4,200 (unpaid late charges), total 73,331 and DPD 65 as of 8 Nov 2026; DPD 26 as of 30 Apr 2026).
 These need that database, so they are skipped unless you point them at it. Keep the database URL and password
 in environment variables, not in files:
 
 ```bash
 cd backend
-REFERENCE_DATABASE_URL='mysql+pymysql://user:password@host:3306/lms' REFERENCE_ADMIN_PASSWORD='...' \
+REFERENCE_DATABASE_URL='mysql+pymysql://user:password@127.0.0.1:3307/GFL_DWH'  # AWS RDS via the SSH tunnel REFERENCE_ADMIN_PASSWORD='...' \
   python -m pytest tests/reference -v
 ```
 

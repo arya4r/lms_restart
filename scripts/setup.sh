@@ -17,6 +17,7 @@ else
   echo "Using the existing .env"
 fi
 
+git config core.hooksPath .githooks 2>/dev/null || true
 docker compose up --build -d
 echo "Waiting for the app..."
 for _ in $(seq 1 60); do

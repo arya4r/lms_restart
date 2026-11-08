@@ -19,8 +19,8 @@ backend/sample_data/loan_master/
 node_modules/
 frontend/dist/
 backend/static/
-.venv/
-venv/
+.venv
+venv
 __pycache__/
 *.pyc
 .pytest_cache/

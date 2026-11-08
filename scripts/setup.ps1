@@ -31,6 +31,7 @@ if (-not (Test-Path ".env")) {
     Write-Host "Using the existing .env" -ForegroundColor Cyan
 }
 
+git config core.hooksPath .githooks 2>$null
 docker compose up --build -d
 if ($LASTEXITCODE -ne 0) { throw "docker compose failed. See the messages above." }
 

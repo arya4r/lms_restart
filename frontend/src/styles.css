@@ -176,3 +176,14 @@ button.btn:disabled { opacity: .5; cursor: not-allowed; }
 /* collapsible lists of errors and warnings */
 details.collapse { margin: .75rem 0; }
 details.collapse > summary { cursor: pointer; font-weight: 600; padding: .4rem 0; }
+
+/* document slots on the booking form */
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .75rem; margin-top: .75rem; }
+.doc-slot { border: 1px dashed #c9ced6; border-radius: 8px; padding: .65rem .75rem; display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
+.doc-slot.has { border-style: solid; border-color: #3b8a5a; background: #f3faf5; }
+.doc-slot .doc-name { font-weight: 600; font-size: .9rem; }
+.doc-slot input[type=file] { font-size: .8rem; max-width: 100%; }
+.doc-slot .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.bad { color: #b42318; }
+.progress { height: 8px; background: #e6e9ee; border-radius: 99px; overflow: hidden; margin-top: .6rem; }
+.progress > div { height: 100%; background: #3b8a5a; transition: width .3s; }

@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (String, Integer, Numeric, Date, DateTime, ForeignKey, Boolean,
-                        Text, UniqueConstraint, Index, func)
+                        Text, UniqueConstraint, Index, LargeBinary, func)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -255,3 +255,21 @@ class AuditLog(Base):
     entity: Mapped[str] = mapped_column(String(32))
     entity_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class LoanDocument(Base):
+    """A file uploaded against a loan (KYC, invoice, agreements, delivery photos ...).
+    Kept in the database so it survives moving the app to another server."""
+    __tablename__ = "loan_documents"
+    __table_args__ = (Index("ix_loan_docs_loan", "loan_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # plain column, no FOREIGN KEY: the RDS app user has no REFERENCES privilege on GFL_DWH.loans
+    loan_id: Mapped[int] = mapped_column(Integer)
+    doc_type: Mapped[str] = mapped_column(String(32))        # see services/documents.py DOC_TYPES
+    label: Mapped[str | None] = mapped_column(String(120), nullable=True)  # name for "Other" documents
+    file_name: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    content: Mapped[bytes] = mapped_column(LargeBinary(length=16_777_215))  # MEDIUMBLOB on MySQL
+    uploaded_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

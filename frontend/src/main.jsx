@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import Loans from './pages/Loans'
 import LoanDetail from './pages/LoanDetail'
 import NewLoan from './pages/NewLoan'
+import Lease3W from './pages/Lease3W'
 import Customers from './pages/Customers'
 import Products from './pages/Products'
 import Migration from './pages/Migration'
@@ -40,6 +41,7 @@ function Shell() {
           <NavLink to="/" end>Portfolio</NavLink>
           <NavLink to="/loans">Loans</NavLink>
           <NavLink to="/loans/new">Book a loan</NavLink>
+          {user.role !== 'VIEWER' && <NavLink to="/lease3w">3-wheeler lease</NavLink>}
           <NavLink to="/customers">Customers</NavLink>
           <NavLink to="/products">Products</NavLink>
           {user.role !== 'VIEWER' && <NavLink to="/data">Data</NavLink>}
@@ -59,6 +61,7 @@ function Shell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/loans" element={<Loans />} />
             <Route path="/loans/new" element={<NewLoan />} />
+            <Route path="/lease3w" element={<Lease3W />} />
             <Route path="/loans/:id" element={<LoanDetail />} />
             <Route path="/loans/:id/soa" element={<Soa />} />
             <Route path="/loans/:id/quote" element={<Quote />} />

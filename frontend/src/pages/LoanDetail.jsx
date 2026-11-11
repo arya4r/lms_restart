@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api, download, money, num, fmtDate, today } from '../api'
 import { Msg, Tag, Modal, Waterfall, FieldGroups, Fields } from '../ui'
 import { useUser } from '../main'
+import { LoanDocuments } from '../Documents'
 
 const MODES = ['NEFT', 'RTGS', 'IMPS', 'UPI', 'NACH', 'CASH', 'CHEQUE', 'OTHER']
 
@@ -13,6 +14,7 @@ const SECTIONS = [
   ['group:Lead details', 'Lead details'],
   ['group:Co-applicant', 'Co-applicant'],
   ['group:Other loan master fields', 'Other fields'],
+  ['documents', 'Documents'],
 ]
 
 function PositionTable({ loanId, excess }) {
@@ -229,7 +231,8 @@ export default function LoanDetail() {
       </div>
 
       {section === 'position' && <PositionTable loanId={id} excess={s?.excess_amount} />}
-      {section === 'position' && <ForeclosureQuote loanId={id} accountNo={loan.loan_number} />}
+      {section === 'documents' && <LoanDocuments loanId={id} canWrite={canWrite} isAdmin={user.role === 'ADMIN'} />}
+      {section === 'position' && loan.interest_method !== 'LEASE_3W' && <ForeclosureQuote loanId={id} accountNo={loan.loan_number} />}
       {section.startsWith('group:') && <FieldGroups groups={pickGroup(loan.details_groups, section.slice(6))} />}
       <div className="tabs" role="tablist">
         {[['rps', 'Schedule'], ['payments', `Payments (${txns.length})`], ['charges', `Charges (${charges.length})`]].map(([k, l]) => (

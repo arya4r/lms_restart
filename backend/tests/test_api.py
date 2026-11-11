@@ -34,7 +34,7 @@ def test_auth_required():
 
 
 def _book(c, principal=100000, tenure=12, disb=date(2026, 3, 10)):
-    prod = c.get("/api/products").json()[0]
+    prod = next(p for p in c.get("/api/products").json() if p["interest_method"] != "LEASE_3W")
     cust = c.post("/api/customers", json={"name": "Test Borrower", "mobile": "9000000001",
                                           "pan": "ABCDE1234F"}).json()
     r = c.post("/api/loans", json={"customer_id": cust["id"], "product_id": prod["id"],

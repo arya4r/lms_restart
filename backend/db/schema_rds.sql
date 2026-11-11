@@ -218,3 +218,18 @@ CREATE TABLE IF NOT EXISTS allocations (
 	FOREIGN KEY(charge_id) REFERENCES charges (id)
 );
 CREATE INDEX ix_allocations_loan_id ON allocations (loan_id);
+
+CREATE TABLE IF NOT EXISTS loan_documents (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	loan_id INTEGER NOT NULL, 
+	doc_type VARCHAR(32) NOT NULL, 
+	label VARCHAR(120), 
+	file_name VARCHAR(255) NOT NULL, 
+	content_type VARCHAR(100) NOT NULL, 
+	size_bytes INTEGER NOT NULL, 
+	content MEDIUMBLOB NOT NULL, 
+	uploaded_by VARCHAR(64), 
+	uploaded_at DATETIME NOT NULL DEFAULT (now()), 
+	PRIMARY KEY (id)
+);
+CREATE INDEX ix_loan_docs_loan ON loan_documents (loan_id);

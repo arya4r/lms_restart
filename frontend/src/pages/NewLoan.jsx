@@ -17,7 +17,7 @@ export default function NewLoan() {
 
   useEffect(() => {
     api('/products').then(ps => {
-      const act = ps.filter(p => p.active); setProducts(act)
+      const act = ps.filter(p => p.active && p.interest_method !== 'LEASE_3W'); setProducts(act)
       if (act[0]) setF(x => ({ ...x, product_id: act[0].id, annual_rate: act[0].default_rate }))
     }).catch(e => setErr(e.message))
   }, [])

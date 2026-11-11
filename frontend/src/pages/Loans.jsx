@@ -7,17 +7,20 @@ const PAGE = 20
 
 export default function Loans() {
   const [sp, setSp] = useSearchParams()
-  const q = sp.get('q') || '', status = sp.get('status') || '', source = sp.get('source') || ''
+  const q = sp.get('q') || '', status = sp.get('status') || '', source = sp.get('source') || '', product = sp.get('product') || ''
   const offset = Number(sp.get('offset') || 0)
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
   const [text, setText] = useState(q)
+  const [products, setProducts] = useState([])
   const nav = useNavigate()
+
+  useEffect(() => { api('/products').then(setProducts).catch(() => setProducts([])) }, [])
 
   useEffect(() => {
     setData(null)
-    api('/loans', { params: { q, status, source, limit: PAGE, offset } }).then(setData).catch(e => setErr(e.message))
-  }, [q, status, source, offset])
+    api('/loans', { params: { q, status, source, product_id: product, limit: PAGE, offset } }).then(setData).catch(e => setErr(e.message))
+  }, [q, status, source, product, offset])
 
   const set = (k, v) => { const n = new URLSearchParams(sp); v ? n.set(k, v) : n.delete(k); if (k !== 'offset') n.delete('offset'); setSp(n) }
 
@@ -35,20 +38,25 @@ export default function Loans() {
         <select value={source} onChange={e => set('source', e.target.value)} aria-label="Origin">
           <option value="">Any origin</option><option value="M2P">Migrated from M2P</option><option value="KFT">Booked in KFT</option><option value="NATIVE">Booked here</option>
         </select>
+        <select value={product} onChange={e => set('product', e.target.value)} aria-label="Product">
+          <option value="">Any product</option>
+          {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
+        </select>
         <button className="btn ghost">Search</button>
       </form>
       <Msg error={err} />
       <div className="panel flush"><div className="table-wrap"><table>
         <thead><tr>
-          <th>Loan</th><th>Borrower</th><th className="n">Principal</th><th className="n">EMI</th>
+          <th>Loan</th><th>Product</th><th>Borrower</th><th className="n">Principal</th><th className="n">EMI</th>
           <th className="n">Principal o/s</th><th className="n">Overdue</th><th>DPD</th><th>Next due</th><th>Status</th>
         </tr></thead>
         <tbody>
-          {!data && <tr><td colSpan={9} className="muted">Loading…</td></tr>}
-          {data?.items.length === 0 && <tr><td colSpan={9} className="empty">No loans match. Clear the filters or book a new loan.</td></tr>}
+          {!data && <tr><td colSpan={10} className="muted">Loading…</td></tr>}
+          {data?.items.length === 0 && <tr><td colSpan={10} className="empty">No loans match. Clear the filters or book a new loan.</td></tr>}
           {data?.items.map(l => (
             <tr key={l.id} className="click" onClick={() => nav(`/loans/${l.id}`)}>
               <td><Link to={`/loans/${l.id}`} onClick={e => e.stopPropagation()}>{l.loan_number}</Link>{l.source !== 'NATIVE' && <> <Tag>{l.source}</Tag></>}</td>
+              <td className="small">{l.product_code || '—'}</td>
               <td>{l.customer_name}</td>
               <td className="n">{money(l.principal)}</td>
               <td className="n">{money(l.emi_amount)}</td>

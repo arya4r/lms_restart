@@ -17,9 +17,11 @@ from .db import get_db
 from .engine.apportion import dpd_bucket
 from .engine.schedule import generate_schedule
 from .models import (User, LoanProduct, Customer, Loan, Installment, Charge, Repayment,
-                     Allocation, AuditLog, RpsRow, RpsTransaction)
+                     Allocation, AuditLog, RpsRow, RpsTransaction, LoanDocument)
 from .services import loan_service as svc
 from .services import exports, master_fields, rps as rps_service, transactions as transactions_service
+from .services import lease3w as lease_service
+from .services import documents as doc_service
 from .services.transactions import state_as_of, levy_late_charges
 from .services.m2p_import import (import_m2p, import_loan_master, import_rps, import_schedule,
                                  import_receipts, import_charges, DEFAULT_CUTOFF)
@@ -123,7 +125,7 @@ def create_user(body: UserIn, db: Session = Depends(get_db), admin=Depends(admin
 class ProductIn(BaseModel):
     code: str = Field(min_length=2, max_length=32)
     name: str
-    interest_method: Literal["REDUCING", "FLAT"] = "REDUCING"
+    interest_method: Literal["REDUCING", "FLAT", "LEASE_3W"] = "REDUCING"
     default_rate: condecimal(ge=0, le=100) = Decimal("0")
     min_tenure: int = Field(1, ge=1)
     max_tenure: int = Field(60, ge=1, le=600)
@@ -267,6 +269,8 @@ class SchedulePreviewIn(BaseModel):
 def preview_schedule(body: SchedulePreviewIn, db: Session = Depends(get_db),
                      _=Depends(current_user)):
     p = _404(db.get(LoanProduct, body.product_id), "Product")
+    if p.interest_method == "LEASE_3W":
+        raise HTTPException(400, "Use the 3-wheeler lease form for this product")
     rate = body.annual_rate if body.annual_rate is not None else p.default_rate
     try:
         rows = generate_schedule(body.principal, rate, body.tenure_months, body.disbursal_date,
@@ -296,7 +300,7 @@ def create_loan(body: LoanIn, db: Session = Depends(get_db), user=Depends(can_wr
 
 
 @router.get("/loans")
-def list_loans(q: str = "", status: str = "", source: str = "",
+def list_loans(q: str = "", status: str = "", source: str = "", product_id: int | None = None,
                limit: int = Query(50, le=200), offset: int = 0,
                db: Session = Depends(get_db), _=Depends(current_user)):
     query = db.query(Loan).join(Customer)
@@ -308,6 +312,8 @@ def list_loans(q: str = "", status: str = "", source: str = "",
         query = query.filter(Loan.status == status)
     if source:
         query = query.filter(Loan.source == source)
+    if product_id:
+        query = query.filter(Loan.product_id == product_id)
     total = query.count()
     rows = (query.options(selectinload(Loan.installments), selectinload(Loan.charges),
                           selectinload(Loan.repayments), selectinload(Loan.customer),
@@ -456,7 +462,7 @@ def waive(charge_id: int, body: WaiveIn, db: Session = Depends(get_db), user=Dep
 @router.get("/loans/{loan_id}/foreclosure-quote")
 def fc_quote(loan_id: int, on: date | None = None, db: Session = Depends(get_db),
              _=Depends(current_user)):
-    return svc.foreclosure_quote(_loan(db, loan_id), on or date.today())
+    return _run(svc.foreclosure_quote, _loan(db, loan_id), on or date.today())
 
 
 class ForecloseIn(PaymentIn):
@@ -580,12 +586,13 @@ CLEAR_PHRASE = "DELETE ALL LOAN DATA"
 
 @router.post("/admin/clear-loan-data")
 def clear_loan_data(body: ClearIn, db: Session = Depends(get_db), user=Depends(admin_only)):
-    """Testing aid: removes every loan, its schedule, payments, charges, RPS rows and customers.
+    """Testing aid: removes every loan, its schedule, payments, charges, documents, RPS rows and customers.
     Users, products and the audit log are kept. Needs the exact confirmation phrase."""
     if body.confirm != CLEAR_PHRASE:
         raise HTTPException(400, f"Type {CLEAR_PHRASE} to confirm")
     counts = {}
-    for name, model in [("allocations", Allocation), ("charges", Charge), ("repayments", Repayment),
+    for name, model in [("loan_documents", LoanDocument),
+                        ("allocations", Allocation), ("charges", Charge), ("repayments", Repayment),
                         ("installments", Installment), ("rps_rows", RpsRow), ("loans", Loan),
                         ("customers", Customer)]:
         counts[name] = db.query(model).delete(synchronize_session=False)
@@ -608,6 +615,9 @@ def rps_generate(body: RpsGenerateIn, db: Session = Depends(get_db), user=Depend
         q = q.filter(Loan.loan_number.in_(body.loan_numbers))
     result = {"loans_generated": 0, "rows": 0, "skipped": [], "errors": [], "warnings": []}
     for loan in q.order_by(Loan.id).all():
+        if loan.interest_method == "LEASE_3W":       # L3 RPS comes from its own calculation
+            result["skipped"].append(loan.loan_number)
+            continue
         exists = db.query(RpsRow.id).filter(RpsRow.loan_number == loan.loan_number).first() is not None
         if exists and not body.replace:
             result["skipped"].append(loan.loan_number)
@@ -718,6 +728,8 @@ def foreclosure_quote(lid: int, as_of: date | None = Query(None), db: Session = 
     unpaid late charges on instalments due on or before the date; less excess. The fee is 0."""
     from decimal import ROUND_HALF_UP
     loan = _404(db.get(Loan, lid), "Loan")
+    if loan.interest_method == "LEASE_3W":
+        raise HTTPException(400, svc.NO_FCL_MSG)
     today = as_of or date.today()
     rows, excess = state_as_of(db, loan, today)
     z = Decimal("0")
@@ -926,3 +938,118 @@ def audit_log(limit: int = Query(100, le=500), db: Session = Depends(get_db),
     rows = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(limit).all()
     return [{"at": a.at.isoformat() if a.at else None, "user": a.username, "action": a.action,
              "entity": a.entity, "entity_id": a.entity_id, "detail": a.detail} for a in rows]
+
+
+# ------------------------------------------------------------------ 3-wheeler lease (L3)
+
+class LeaseForm(BaseModel):
+    vehicle: Decimal = Field(gt=0)
+    insurance: Decimal = Decimal("0")
+    rto: Decimal = Decimal("0")
+    misc: Decimal = Decimal("0")
+    hsrp: Decimal = Decimal("0")
+    kazam: Decimal = Decimal("0")
+    scheme: Decimal = Decimal("0")
+
+
+class LeasePreviewIn(LeaseForm):
+    disbursal_date: date
+
+
+class LeaseLoanIn(LeasePreviewIn):
+    lan: str = Field(min_length=1, max_length=40)
+    customer_name: str = Field(min_length=1, max_length=160)
+    customer_mobile: str | None = None
+    dealer: str | None = None
+
+
+_LEASE_FIELDS = {"vehicle", "insurance", "rto", "misc", "hsrp", "kazam", "scheme"}
+
+
+@router.post("/lease3w/preview")
+def lease_preview(body: LeasePreviewIn, _=Depends(current_user)):
+    return lease_service.preview(body.model_dump(include=_LEASE_FIELDS), body.disbursal_date)
+
+
+@router.post("/lease3w/loans")
+def lease_book(body: LeaseLoanIn, db: Session = Depends(get_db), user=Depends(can_write)):
+    loan = _run(lease_service.book_one, db, lan=body.lan, name=body.customer_name,
+                mobile=body.customer_mobile or "", dealer=body.dealer or "",
+                form=body.model_dump(include=_LEASE_FIELDS), disb=body.disbursal_date,
+                user=user.username)
+    db.commit()
+    return _loan_out(_loan(db, loan.id))
+
+
+@router.post("/lease3w/import")
+async def lease_import(file: UploadFile = File(...), dry_run: bool = Form(True),
+                       db: Session = Depends(get_db), user=Depends(can_write)):
+    raw = await file.read()
+    return _run(lease_service.check_or_import, db, raw, dry_run=dry_run, user=user.username)
+
+
+@router.post("/lease3w/import-job")
+async def lease_import_job(file: UploadFile = File(...), user=Depends(can_write)):
+    """Starts the 3-wheeler import in the background; the page reads imported / pending counts
+    from /lease3w/jobs/{id} while it runs."""
+    from .services import jobs
+    try:
+        jid = jobs.start("lease3w", lease_service.check_or_import, await file.read(),
+                         dry_run=False, user=user.username)
+    except jobs.JobBusy:
+        raise HTTPException(409, "A 3-wheeler import is already running. Wait for it to finish.")
+    return {"job_id": jid}
+
+
+@router.get("/lease3w/jobs/{jid}")
+def lease_import_status(jid: str, _=Depends(can_write)):
+    from .services import jobs
+    job = jobs.get(jid)
+    if not job or job["kind"] != "lease3w":
+        raise HTTPException(404, "Import not found")
+    return job
+
+
+# ------------------------------------------------------------------ loan documents
+
+@router.get("/documents/types")
+def document_types(_=Depends(current_user)):
+    return [{"code": c, "label": l} for c, l in doc_service.DOC_TYPES]
+
+
+@router.get("/loans/{lid}/documents")
+def loan_documents(lid: int, db: Session = Depends(get_db), _=Depends(current_user)):
+    _404(db.get(Loan, lid), "Loan")
+    return doc_service.list_for(db, lid)
+
+
+@router.post("/loans/{lid}/documents")
+async def upload_document(lid: int, doc_type: str = Form(...), label: str = Form(""),
+                          file: UploadFile = File(...), db: Session = Depends(get_db),
+                          user=Depends(can_write)):
+    loan = _404(db.get(Loan, lid), "Loan")
+    data = await file.read(doc_service.MAX_BYTES + 1)
+    d = _run(doc_service.save, db, loan, doc_type=doc_type, label=label,
+             file_name=file.filename or "document", data=data, user=user.username)
+    db.commit()
+    return doc_service.doc_out(d)
+
+
+@router.get("/documents/{doc_id}/file")
+def download_document(doc_id: int, db: Session = Depends(get_db), user=Depends(can_write)):
+    from urllib.parse import quote
+    d = _404(db.get(LoanDocument, doc_id), "Document")
+    svc.audit(db, user.username, "VIEW_DOCUMENT", "document", d.id, {"loan_id": d.loan_id})
+    db.commit()
+    return Response(d.content, media_type=d.content_type,
+                    headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(d.file_name)}"})
+
+
+@router.delete("/documents/{doc_id}")
+def delete_document(doc_id: int, db: Session = Depends(get_db), user=Depends(admin_only)):
+    d = _404(db.get(LoanDocument, doc_id), "Document")
+    svc.audit(db, user.username, "DELETE_DOCUMENT", "document", d.id,
+              {"loan_id": d.loan_id, "doc_type": d.doc_type, "file": d.file_name})
+    db.delete(d)
+    db.commit()
+    return {"deleted": doc_id}

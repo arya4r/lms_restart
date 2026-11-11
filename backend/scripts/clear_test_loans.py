@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.db import SessionLocal, DATABASE_URL  # noqa: E402
-from app.models import Loan, Customer, Allocation  # noqa: E402
+from app.models import Loan, Customer, Allocation, LoanDocument  # noqa: E402
 from app.services.m2p_import import _read  # noqa: E402
 from app.services.loan_service import audit  # noqa: E402
 
@@ -47,6 +47,7 @@ def main() -> None:
         ids = [l.id for l in targets]
         customer_ids = {l.customer_id for l in targets}
         db.query(Allocation).filter(Allocation.loan_id.in_(ids)).delete(synchronize_session=False)
+        db.query(LoanDocument).filter(LoanDocument.loan_id.in_(ids)).delete(synchronize_session=False)
         for l in targets:
             db.delete(l)  # instalments, charges and repayments cascade
         db.flush()

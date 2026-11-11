@@ -44,6 +44,8 @@ def book_loan(db: Session, *, customer_id: int, product_id: int, principal, annu
     product = db.get(LoanProduct, product_id)
     if not product or not product.active:
         raise LmsError("Loan product not found or inactive")
+    if product.interest_method == "LEASE_3W":
+        raise LmsError("Use the 3-wheeler lease form for this product")
     customer = db.get(Customer, customer_id)
     if not customer:
         raise LmsError("Customer not found")
@@ -290,7 +292,7 @@ def run_late_fees(db: Session, as_of: date | None = None, user: str | None = Non
     loans = db.query(Loan).filter(Loan.status == "ACTIVE").all()
     for loan in loans:
         p = loan.product
-        if not p or p.late_fee <= 0:
+        if not p or p.late_fee <= 0 or loan.interest_method == "LEASE_3W":
             continue
         levied = {c.installment_id for c in loan.charges if c.charge_type == "LATE_FEE"}
         start = loan.migration_cutoff or loan.disbursal_date
@@ -314,7 +316,12 @@ def run_late_fees(db: Session, as_of: date | None = None, user: str | None = Non
 
 # --------------------------------------------------------------------------- foreclosure
 
+NO_FCL_MSG = "Foreclosure is not offered on 3-wheeler lease loans"
+
+
 def foreclosure_quote(loan: Loan, fc_date: date) -> dict:
+    if loan.interest_method == "LEASE_3W":
+        raise LmsError(NO_FCL_MSG)
     insts = live_installments(loan)
     due = [i for i in insts if i.due_date <= fc_date]
     future = [i for i in insts if i.due_date > fc_date]
@@ -340,6 +347,8 @@ def foreclosure_quote(loan: Loan, fc_date: date) -> dict:
 
 def foreclose(db: Session, loan: Loan, fc_date: date, amount, mode="NEFT", reference=None,
               user: str | None = None) -> dict:
+    if loan.interest_method == "LEASE_3W":
+        raise LmsError(NO_FCL_MSG)
     if loan.status != "ACTIVE":
         raise LmsError(f"Only active loans can be foreclosed (loan is {loan.status})")
     if fc_date > date.today():

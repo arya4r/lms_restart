@@ -27,7 +27,7 @@ export default function Products() {
           {rows?.map(p => (
             <tr key={p.id}>
               <td><strong>{p.name}</strong><div className="small muted">{p.code}</div></td>
-              <td>{p.interest_method === 'FLAT' ? 'Flat' : 'Reducing'}</td>
+              <td>{p.interest_method === 'FLAT' ? 'Flat' : p.interest_method === 'LEASE_3W' ? '3W lease (L3)' : 'Reducing'}</td>
               <td className="n">{Number(p.default_rate)}%</td>
               <td className="n">{money(p.min_amount)}<br />{money(p.max_amount)}</td>
               <td className="n">{p.min_tenure}–{p.max_tenure} mo</td>
@@ -65,7 +65,7 @@ function ProductForm({ initial, onClose, onDone }) {
         <div className="form">
           <label className="f">Code<input value={f.code} onChange={set('code')} required disabled={!!f.id} /></label>
           <label className="f">Name<input value={f.name} onChange={set('name')} required /></label>
-          <label className="f">Schedule<select value={f.interest_method} onChange={set('interest_method')}><option value="REDUCING">Reducing balance EMI</option><option value="FLAT">Flat rate</option></select></label>
+          <label className="f">Schedule<select value={f.interest_method} onChange={set('interest_method')}><option value="REDUCING">Reducing balance EMI</option><option value="FLAT">Flat rate</option><option value="LEASE_3W">3-wheeler lease (L3 RPS)</option></select></label>
           <label className="f">Default rate (%)<input type="number" step="0.01" value={f.default_rate} onChange={set('default_rate')} /></label>
           <label className="f">Min amount<input type="number" value={f.min_amount} onChange={set('min_amount')} /></label>
           <label className="f">Max amount<input type="number" value={f.max_amount} onChange={set('max_amount')} /></label>

@@ -45,8 +45,8 @@ CHARGES_FROM = date(2026, 4, 5)  # late charges apply to instalments due on or a
 def levy_late_charges(rows, loan: Loan, as_of, grace: int, fee: Decimal) -> int:
     """A late charge for each instalment due on or after CHARGES_FROM that is still unpaid
     (interest or principal) more than `grace` days after its due date, once per instalment.
-    Returns how many were added."""
-    if fee <= 0:
+    Returns how many were added. 3-wheeler lease (L3) loans carry no late charge."""
+    if fee <= 0 or loan.interest_method == "LEASE_3W":
         return 0
     added = 0
     for r in rows:
